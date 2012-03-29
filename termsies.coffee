@@ -216,18 +216,13 @@ class Screen extends EventEmitter
         @
 
 
-class Tab
+class Tab extends EventEmitter
     constructor: (@scr, @title) ->
         @buf = ""
         @inputTop = @scr.height
         @log = []
         @inputLines = ['']
 
-        @drawTitle()
-        @drawLog()
-        @resetInputCursor()
-
-        @scr.on 'keypress', @handleKeypress
 
 
     handleKeypress: (c, kc) =>
@@ -240,14 +235,19 @@ class Tab
                 @drawInput()
             else if kc.name == 'enter'
                 if @buf.length > 0
-                    buf = "#{@scr.colorize 'You', COLORS.blue}: #{@buf}"
-                    lines = @wrap buf
-                    for line in lines
-                        @log.push line
-                    @buf = ""
-                    @inputLines = ['']
-                    @drawInput()
-                    @drawLog()
+                    if @buf == "/nexttab"
+                        @buf = ""
+                        @inputLines = ['']
+                        @emit 'nextTab'
+                    else
+                        buf = "#{@scr.colorize 'You', COLORS.blue}: #{@buf}"
+                        lines = @wrap buf
+                        for line in lines
+                            @log.push line
+                        @buf = ""
+                        @inputLines = ['']
+                        @drawInput()
+                        @drawLog()
             @scr.log "kc: #{util.inspect kc}"
 
 
@@ -306,7 +306,42 @@ class Tab
         lines = @inputLines
         @scr.pos lines[lines.length - 1].length + 1, @scr.height
         @scr.showCursor()
+
+    hide: ->
+        @scr.removeListener 'keypress', @handleKeypress
+        @scr.clear()
+
+    show: ->
+        @drawTitle()
+        @drawLog()
+        @drawInput()
+        @scr.on 'keypress', @handleKeypress
         
+class TabManager
+    constructor: ->
+        @tabs = []
+        @currentTab = 0
+
+    nextTab: =>
+        if @tabs.length > 1
+            @changeTab((@currentTab + 1) % @tabs.length)
+
+    prevTab: =>
+        if @tabs.length > 1
+            @changeTab((@currentTab - 1) % @tabs.length)
+
+    changeTab: (idx) ->
+        @tabs[@currentTab].hide()
+        @tabs[@currentTab].removeListener 'nextTab', @nextTab
+        @currentTab = idx
+        @tabs[@currentTab].show()
+        @tabs[@currentTab].on 'nextTab', @nextTab
+
+    addTab: (tab) ->
+        @tabs.push tab
+        @changeTab @tabs.length - 1
+
+
 
 
 scr = null
@@ -326,7 +361,11 @@ scr.on 'SIGINT', handleSIGINT
 
 scr.clear()
 
-title = "Chat with Chris Moultrie"
-t = new Tab scr, title
+t = new Tab scr, "Chat with Chris Moultrie"
+tt = new Tab scr, "Chat with Philip Thrasher"
+
+tm = new TabManager()
+tm.addTab t
+tm.addTab tt
 
 
